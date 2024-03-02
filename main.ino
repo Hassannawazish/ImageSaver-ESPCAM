@@ -8,8 +8,11 @@ void startCameraServer(); // External Function present in Application
 #include "EEPROM.h"            // Contains Declarations of Functions required for EEPROM Acess, Read, Write etc
 // define the number of bytes you want to access
 #define EEPROM_SIZE 1
+#define TRIGGER_PIN 13
+#define MAX_IMAGES 10
 
 int pictureNumber = 0;
+int folderNumber = 0;
 
 
 void setup() { //First Function That would Run when any Arduino Based Board Starts
@@ -95,36 +98,58 @@ void setup() { //First Function That would Run when any Arduino Based Board Star
   
 }
 
+
 void loop() {
-  // put your main code here, to run repeatedly:
-  camera_fb_t * fb = NULL;
-  // Take Picture with Camera
-  fb = esp_camera_fb_get();  
-  if(!fb) {
-    Serial.println("Camera capture failed");
-    return;
+  if (digitalRead(TRIGGER_PIN) == HIGH) {
+    Serial.println("Trigger pin is LOW. Capturing images...");
+    
+    folderNumber++;
+    if (folderNumber > 9999) {  // Adjust the limit as needed
+      folderNumber = 1;
+    }
+    delay(1000);
+    String folderPath = "/Folder" + String(folderNumber);
+
+    if (SD_MMC.exists(folderPath.c_str())) {
+      Serial.println("Folder already exists. Deleting existing folder.");
+      SD_MMC.rmdir(folderPath.c_str());
+    }
+    
+    if (!SD_MMC.mkdir(folderPath.c_str())) {
+      Serial.println("Failed to create folder");
+      return;
+    }
+
+    for (int val = 0; val < MAX_IMAGES; val++) {
+      pictureNumber = EEPROM.read(0) + 1;
+      String path = folderPath + "/picture" + String(pictureNumber) + ".jpg";
+
+      Serial.printf("Picture file name: %s\n", path.c_str());
+
+      camera_fb_t *fb = esp_camera_fb_get();
+      if (!fb) {
+        Serial.println("Camera capture failed");
+        return;
+      }
+
+      File file = SD_MMC.open(path.c_str(), FILE_WRITE);
+      if (!file) {
+        Serial.println("Failed to open file in writing mode");
+      } else {
+        file.write(fb->buf, fb->len);
+        Serial.printf("Saved file to path: %s\n", path.c_str());
+        EEPROM.write(0, pictureNumber);
+        EEPROM.commit();
+      }
+
+      file.close();
+      esp_camera_fb_return(fb);
+
+      delay(500);  // Adjust the delay as needed between images
+    }
+  } else {
+    Serial.println("Trigger pin is LOW");
   }
-  pictureNumber  = EEPROM.read(0) + 1;
-  // Path where new picture will be saved in SD Card
-  String path = "/picture" + String(pictureNumber) +".jpg";
-  Serial.printf("Picture file name: %s\n", path.c_str());
-  
-  //Open the File in Write mode, Open will also Create the file if not present                                    
-  File file = SD_MMC.open(path.c_str(), FILE_WRITE);
-  if(!file){
-    Serial.println("Failed to open file in writing mode");
-  } 
-  else {
-    file.write(fb->buf, fb->len); // payload (image), payload length
-    Serial.printf("Saved file to path: %s\n", path.c_str());//Path of File Saved
-    EEPROM.write(0, pictureNumber);//Write Current Running File Number to First Byte of EEPROM
-    EEPROM.commit();// Approve the Write Operation.
-  }
-  file.close();
-  esp_camera_fb_return(fb);   
 
-  delay(5000
-  );
-
-
+  delay(100);
 }
