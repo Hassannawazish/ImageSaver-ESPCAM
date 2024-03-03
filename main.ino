@@ -145,7 +145,7 @@ void loop() {
       file.close();
       esp_camera_fb_return(fb);
 
-      delay(500);  // Adjust the delay as needed between images
+      delay(2000);  // Adjust the delay as needed between images
     }
   } else {
     Serial.println("Trigger pin is LOW");
